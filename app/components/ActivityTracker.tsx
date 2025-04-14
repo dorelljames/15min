@@ -77,12 +77,14 @@ export default function ActivityTracker() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 pt-8 pb-16 relative min-h-screen">
-      <div className="mb-8 sticky top-0 bg-gray-50/50 backdrop-blur-sm z-10 py-3">
+      <div className="mb-8 sticky top-0 bg-background/80 backdrop-blur-sm z-10 py-3">
         <div className="flex flex-col">
-          <span className="text-xl text-gray-600">
+          <span className="text-xl text-foreground/80">
             {dayOfWeek} <span className="text-rose-500">{month}</span>
           </span>
-          <span className="text-6xl font-light">{dayOfMonth}</span>
+          <span className="text-6xl font-light text-foreground">
+            {dayOfMonth}
+          </span>
         </div>
       </div>
 

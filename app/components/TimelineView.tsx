@@ -82,7 +82,7 @@ export default function TimelineView({
     <div className="w-full max-w-3xl mx-auto">
       <div className="relative">
         {/* Left timeline with vertical line */}
-        <div className="absolute left-20 top-0 bottom-0 w-[1px] bg-gray-200"></div>
+        <div className="absolute left-20 top-0 bottom-0 w-[1px] bg-border"></div>
 
         <div>
           {timeBlocks.map((block, index) => {
@@ -96,10 +96,12 @@ export default function TimelineView({
                 {block.isFirstOfHour && (
                   <div className="h-10 flex items-center">
                     <div className="w-20 text-right pr-4">
-                      <div className="text-gray-500 text-sm">
+                      <div className="text-muted-foreground text-sm">
                         {block.hour12}
                       </div>
-                      <div className="text-gray-500 text-xs">{block.ampm}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {block.ampm}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -112,8 +114,8 @@ export default function TimelineView({
                   {/* Timeline dot */}
                   <div className="w-[2px] self-stretch relative">
                     <div
-                      className={`absolute w-[6px] h-[6px] rounded-full bg-white border-2 ${
-                        hasActivities ? "border-rose-300" : "border-gray-200"
+                      className={`absolute w-[6px] h-[6px] rounded-full bg-background border-2 ${
+                        hasActivities ? "border-rose-300" : "border-border"
                       } left-[-2.5px] top-[calc(50%-3px)]`}
                     ></div>
                   </div>
@@ -121,7 +123,7 @@ export default function TimelineView({
                   <div className="flex-1 pl-5 flex items-center">
                     <div className="w-full">
                       {hasActivities ? (
-                        <div className="border-b border-gray-200 py-2 px-1 min-h-8">
+                        <div className="border-b border-border py-2 px-1 min-h-8">
                           {blockActivities.map((activity) =>
                             editingActivity?.id === activity.id ? (
                               <div
@@ -132,7 +134,7 @@ export default function TimelineView({
                                   type="text"
                                   value={newActivity}
                                   onChange={handleInputChange}
-                                  className="flex-1 bg-transparent border-none outline-none text-gray-700 py-1"
+                                  className="flex-1 bg-transparent border-none outline-none text-foreground py-1"
                                   maxLength={MAX_CHARS}
                                   autoFocus
                                   onKeyDown={(e) => {
@@ -152,14 +154,14 @@ export default function TimelineView({
                                     }
                                   }}
                                 />
-                                <div className="text-xs text-gray-400 ml-2 whitespace-nowrap">
+                                <div className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
                                   {newActivity.length}/{MAX_CHARS}
                                 </div>
                               </div>
                             ) : (
                               <div
                                 key={activity.id}
-                                className="py-1 text-gray-600 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors"
+                                className="py-1 text-foreground cursor-pointer hover:bg-secondary/20 rounded px-1 transition-colors"
                                 onClick={() => {
                                   setEditingActivity(activity);
                                   setNewActivity(activity.description);
@@ -171,14 +173,14 @@ export default function TimelineView({
                           )}
                         </div>
                       ) : editingTimeBlock === block.fulltime ? (
-                        <div className="border-b border-gray-200 py-2 px-1 min-h-8">
+                        <div className="border-b border-border py-2 px-1 min-h-8">
                           <div className="flex items-center">
                             <input
                               type="text"
                               value={newActivity}
                               onChange={handleInputChange}
                               placeholder="What did you do?"
-                              className="flex-1 bg-transparent border-none outline-none text-gray-700"
+                              className="flex-1 bg-transparent border-none outline-none text-foreground"
                               maxLength={MAX_CHARS}
                               autoFocus
                               onKeyDown={(e) => {
@@ -197,17 +199,17 @@ export default function TimelineView({
                                 }
                               }}
                             />
-                            <div className="text-xs text-gray-400 ml-2 whitespace-nowrap">
+                            <div className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
                               {newActivity.length}/{MAX_CHARS}
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div
-                          className="h-8 flex items-center cursor-pointer hover:bg-gray-50 px-1 text-gray-400 text-xs border-b border-gray-100"
+                          className="h-8 flex items-center cursor-pointer hover:bg-secondary/20 px-1 text-muted-foreground text-xs border-b border-border/50"
                           onClick={() => setEditingTimeBlock(block.fulltime)}
                         >
-                          + Add
+                          + Add activity
                         </div>
                       )}
                     </div>
