@@ -60,6 +60,11 @@ export default function ActivityTracker() {
     );
   };
 
+  // Delete an activity
+  const handleDeleteActivity = (id: string) => {
+    setActivities(activities.filter((activity) => activity.id !== id));
+  };
+
   // This function is still needed for the TimelineView props
   const handleToggleActivity = (id: string) => {
     // We're not using this functionality anymore, but keeping it for interface compatibility
@@ -93,6 +98,7 @@ export default function ActivityTracker() {
         onToggleActivity={handleToggleActivity}
         onAddActivity={handleAddActivity}
         onUpdateActivity={handleUpdateActivity}
+        onDeleteActivity={handleDeleteActivity}
       />
     </div>
   );

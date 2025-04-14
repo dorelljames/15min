@@ -8,6 +8,7 @@ interface TimelineViewProps {
   onToggleActivity: (id: string) => void;
   onAddActivity: (description: string, timeBlock: string) => void;
   onUpdateActivity?: (id: string, description: string) => void;
+  onDeleteActivity: (id: string) => void;
 }
 
 export default function TimelineView({
@@ -15,10 +16,14 @@ export default function TimelineView({
   onToggleActivity,
   onAddActivity,
   onUpdateActivity = (id, description) => {}, // Default empty function
+  onDeleteActivity,
 }: TimelineViewProps) {
   const [newActivity, setNewActivity] = useState("");
   const [editingTimeBlock, setEditingTimeBlock] = useState<string | null>(null);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [deletingActivityId, setDeletingActivityId] = useState<string | null>(
+    null
+  );
   const today = new Date();
 
   // Twitter-length character limit
@@ -85,7 +90,7 @@ export default function TimelineView({
         <div className="absolute left-20 top-0 bottom-0 w-[1px] bg-border"></div>
 
         <div>
-          {timeBlocks.map((block, index) => {
+          {timeBlocks.map((block) => {
             // Find activities for this time block
             const blockActivities = activityByTimeBlock[block.fulltime] || [];
             const hasActivities = blockActivities.length > 0;
@@ -107,8 +112,6 @@ export default function TimelineView({
                 )}
 
                 <div className="flex h-12">
-                  {" "}
-                  {/* Fixed height for consistency */}
                   {/* Time column spacer */}
                   <div className="w-20"></div>
                   {/* Timeline dot */}
@@ -161,13 +164,53 @@ export default function TimelineView({
                             ) : (
                               <div
                                 key={activity.id}
-                                className="py-1 text-foreground cursor-pointer hover:bg-secondary/20 rounded px-1 transition-colors text-base"
-                                onClick={() => {
-                                  setEditingActivity(activity);
-                                  setNewActivity(activity.description);
-                                }}
+                                className="py-1 text-foreground hover:bg-secondary/20 rounded px-1 transition-colors text-base flex items-center justify-between group"
                               >
-                                {activity.description}
+                                <span
+                                  className="cursor-pointer flex-grow"
+                                  onClick={() => {
+                                    setEditingActivity(activity);
+                                    setNewActivity(activity.description);
+                                  }}
+                                >
+                                  {activity.description}
+                                </span>
+                                {deletingActivityId === activity.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDeleteActivity(activity.id);
+                                        setDeletingActivityId(null);
+                                      }}
+                                      className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded hover:bg-rose-600 transition-colors"
+                                      title="Confirm delete"
+                                    >
+                                      Delete
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeletingActivityId(null);
+                                      }}
+                                      className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded hover:bg-secondary/80 transition-colors"
+                                      title="Cancel delete"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeletingActivityId(activity.id);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-600 px-2"
+                                    title="Delete activity"
+                                  >
+                                    ×
+                                  </button>
+                                )}
                               </div>
                             )
                           )}
