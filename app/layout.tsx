@@ -29,11 +29,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <Script
-          defer
-          src="https://stats.gocebby.com/script.js"
-          data-website-id="f9561ec8-2e43-4e56-abc5-381d6fa1f413"
-        />
+        {process.env.NODE_ENV === "production" && (
+          <Script
+            defer
+            src="https://stats.gocebby.com/script.js"
+            data-website-id="f9561ec8-2e43-4e56-abc5-381d6fa1f413"
+          />
+        )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
