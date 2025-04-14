@@ -161,7 +161,7 @@ export default function TimelineView({
                             ) : (
                               <div
                                 key={activity.id}
-                                className="py-1 text-foreground cursor-pointer hover:bg-secondary/20 rounded px-1 transition-colors"
+                                className="py-1 text-foreground cursor-pointer hover:bg-secondary/20 rounded px-1 transition-colors text-base"
                                 onClick={() => {
                                   setEditingActivity(activity);
                                   setNewActivity(activity.description);
