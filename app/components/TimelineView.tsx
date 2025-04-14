@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { Activity } from "../types";
-import { useState } from "react";
 
 interface TimelineViewProps {
   activities: Activity[];
@@ -24,24 +25,35 @@ export default function TimelineView({
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(
     null
   );
-  const today = new Date();
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const timelineContainerRef = useRef<HTMLDivElement>(null); // Ref for the timeline container
+
+  useEffect(() => {
+    // Update current time every minute
+    const timerId = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // 60 * 1000 ms = 1 minute
+
+    // Clear interval on component unmount
+    return () => clearInterval(timerId);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   // Twitter-length character limit
   const MAX_CHARS = 280;
 
-  // Generate time blocks for the day (starting at 6:00 AM)
-  const startHour = 6;
-  const hours = 16; // Show 16 hours (6 AM to 10 PM)
+  // Generate time blocks for the full day (00:00 to 23:45)
+  const startHour = 0; // Start at midnight
+  const hours = 24; // Show 24 hours
   const timeBlocks = Array.from({ length: hours * 4 }, (_, i) => {
     const hour = Math.floor(i / 4) + startHour;
     const minute = (i % 4) * 15;
+    // Adjust hour for 12 AM display
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return {
       time: `${hour}:${minute.toString().padStart(2, "0")}`,
-      display: `${hour}:${minute.toString().padStart(2, "0")}`,
-      hour12: `${hour > 12 ? hour - 12 : hour}:${minute
-        .toString()
-        .padStart(2, "0")}`,
-      ampm: hour >= 12 ? "PM" : "AM",
+      display: `${displayHour}:${minute.toString().padStart(2, "0")}`,
+      hour12: `${displayHour}:${minute.toString().padStart(2, "0")}`, // Use displayHour
+      ampm: hour < 12 ? "AM" : "PM", // 0-11 is AM, 12-23 is PM
       fulltime: `${hour.toString().padStart(2, "0")}:${minute
         .toString()
         .padStart(2, "0")}`,
@@ -83,14 +95,45 @@ export default function TimelineView({
     }
   };
 
+  // Calculate current time position using percentage of container height
+  const currentHour = currentTime.getHours();
+  const currentMinute = currentTime.getMinutes();
+  const totalMinutesInDay = 24 * 60;
+  const minutesPassed = currentHour * 60 + currentMinute;
+  const percentageOfDayPassed = (minutesPassed / totalMinutesInDay) * 100;
+
+  // Calculate the offset based on the container's scroll height
+  let currentTimeTopOffset = 0;
+  if (timelineContainerRef.current) {
+    // Calculate offset relative to the scrollable height
+    currentTimeTopOffset =
+      (percentageOfDayPassed / 100) * timelineContainerRef.current.scrollHeight;
+  }
+
   return (
     <div className="w-full max-w-3xl mx-auto">
       <div className="relative">
         {/* Left timeline with vertical line */}
         <div className="absolute left-20 top-0 bottom-0 w-[1px] bg-border"></div>
 
-        <div>
-          {timeBlocks.map((block) => {
+        {/* Current Time Indicator - positioned relative to the timelineContainerRef */}
+        {timelineContainerRef.current && ( // Only render if ref is available
+          <div
+            className="absolute left-[70px] right-0 h-[2px] bg-red-500 z-10 flex items-center"
+            style={{ top: `${currentTimeTopOffset}px` }}
+            title={`Current time: ${currentTime.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`}
+          >
+            <div className="absolute left-[-11px] w-4 h-4 rounded-full bg-red-500 border-2 border-background"></div>
+          </div>
+        )}
+
+        <div ref={timelineContainerRef}>
+          {" "}
+          {/* Add ref here */}
+          {timeBlocks.map((block, index) => {
             // Find activities for this time block
             const blockActivities = activityByTimeBlock[block.fulltime] || [];
             const hasActivities = blockActivities.length > 0;
@@ -249,10 +292,15 @@ export default function TimelineView({
                         </div>
                       ) : (
                         <div
-                          className="h-8 flex items-center cursor-pointer hover:bg-secondary/20 px-1 text-muted-foreground text-xs border-b border-border/50"
-                          onClick={() => setEditingTimeBlock(block.fulltime)}
+                          className="border-b border-border py-2 px-1 min-h-8 h-full flex items-center cursor-pointer hover:bg-secondary/10 transition-colors group"
+                          onClick={() => {
+                            setEditingTimeBlock(block.fulltime);
+                            setNewActivity("");
+                          }}
                         >
-                          + Add activity
+                          <span className="text-transparent group-hover:text-muted-foreground text-xs transition-colors">
+                            Click to add activity
+                          </span>
                         </div>
                       )}
                     </div>
