@@ -18,6 +18,12 @@ export default function ActivityForm({ onAddActivity }: ActivityFormProps) {
       id: crypto.randomUUID(),
       description: description.trim(),
       timestamp: new Date(),
+      completed: false,
+      timeBlock: new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
     };
 
     onAddActivity(newActivity);
