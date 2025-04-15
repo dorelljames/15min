@@ -57,7 +57,7 @@ export default function ActivityTracker() {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Format date for display
   const dayOfWeek = selectedDate.toLocaleDateString("en-US", {
@@ -135,8 +135,21 @@ export default function ActivityTracker() {
   useEffect(() => {
     if (isClient) {
       checkSummarizerAvailability();
+
+      // Load auto-refresh setting from localStorage
+      const savedAutoRefresh = localStorage.getItem("autoRefresh");
+      if (savedAutoRefresh !== null) {
+        setAutoRefresh(savedAutoRefresh === "true");
+      }
     }
   }, [isClient]);
+
+  // Save auto-refresh setting to localStorage when it changes
+  useEffect(() => {
+    if (isClient) {
+      localStorage.setItem("autoRefresh", autoRefresh.toString());
+    }
+  }, [autoRefresh, isClient]);
 
   // Load activities from local storage on component mount
   useEffect(() => {
@@ -421,6 +434,11 @@ Format your response with markdown headings and bullet points.`;
     </div>
   );
 
+  // Toggle auto-refresh function
+  const toggleAutoRefresh = () => {
+    setAutoRefresh((prev) => !prev);
+  };
+
   // Conditional rendering based on isClient
   if (!isClient) {
     // Render nothing or a placeholder during SSR and initial client render
@@ -522,7 +540,7 @@ Format your response with markdown headings and bullet points.`;
                   {selectedDate.toLocaleDateString() ===
                     new Date().toLocaleDateString() && (
                     <button
-                      onClick={() => setAutoRefresh(!autoRefresh)}
+                      onClick={toggleAutoRefresh}
                       className={`p-1.5 rounded-full transition-colors ${
                         autoRefresh
                           ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
