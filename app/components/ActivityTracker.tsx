@@ -844,7 +844,7 @@ Format your response with markdown headings and bullet points.`;
                     )}
                   </div>
                 ) : summary ? (
-                  <div className="text-foreground/80 max-h-[40vh] overflow-y-auto">
+                  <div className="text-foreground/80 max-h-[50vh] overflow-y-auto">
                     {summary.isAI ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none">
                         <ReactMarkdown
