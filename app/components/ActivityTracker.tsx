@@ -57,6 +57,7 @@ export default function ActivityTracker() {
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   // Format date for display
   const dayOfWeek = selectedDate.toLocaleDateString("en-US", {
@@ -219,9 +220,17 @@ export default function ActivityTracker() {
     setIsSummarizing(true);
     setSummary(null);
 
-    const activitiesText = filteredActivities
-      .map((a) => `- ${a.description} (${a.timeBlock})`)
+    // Format activities with time information for better context
+    const activitiesWithTime = filteredActivities
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      .map((a) => {
+        const time = a.timeBlock;
+        return `- ${time}: ${a.description}`;
+      })
       .join("\n");
+
+    // Calculate total active hours
+    const activeHours = calculateActiveHours(filteredActivities);
 
     try {
       // Try to use the Summarizer API first
@@ -241,12 +250,20 @@ export default function ActivityTracker() {
           return;
         }
 
-        const options = {
-          sharedContext: "Daily activities tracker",
-          type: "key-points" as "key-points",
-          format: "markdown" as "markdown",
-          length: "medium" as "medium",
-        };
+        // Create a better context for time analysis
+        const timeContext = `
+These are chronologically ordered activities completed during ${
+          selectedDate.toLocaleDateString() === new Date().toLocaleDateString()
+            ? "today"
+            : `on ${month} ${dayOfMonth}`
+        }. Total tracked time: approximately ${activeHours} hours.
+
+Please analyze:
+1. How the day was spent (time distribution)
+2. Main focus areas or themes
+3. Productive vs non-productive time
+4. Any patterns worth noting
+`;
 
         // Create the summarizer
         const monitor = (m: EventTarget) => {
@@ -264,13 +281,18 @@ export default function ActivityTracker() {
           });
         };
 
-        const summarizer = await window.ai.summarizer.create({ monitor });
+        const summarizer = await window.ai.summarizer.create({
+          monitor,
+          type: "key-points",
+          format: "markdown",
+          length: "medium",
+        });
         await summarizer.ready;
 
         // Generate the summary
         console.log("Generating summary with Summarizer API");
-        const result = await summarizer.summarize(activitiesText, {
-          context: "These are activities completed during the day.",
+        const result = await summarizer.summarize(activitiesWithTime, {
+          context: timeContext,
         });
         console.log("🚀 ~ generateSummary ~ result:", result);
 
@@ -280,8 +302,26 @@ export default function ActivityTracker() {
       else if (window.ai?.createGenericSession) {
         console.log("Using generic session API for summary");
         const session = await window.ai.createGenericSession();
-        const prompt = `Summarize the following activities for the day in one or two sentences:\n${activitiesText}`;
-        const result = await session.prompt(prompt);
+
+        const timeContext = `
+Analyze these chronologically ordered activities for ${
+          selectedDate.toLocaleDateString() === new Date().toLocaleDateString()
+            ? "today"
+            : `${month} ${dayOfMonth}`
+        }. Total tracked time: approximately ${activeHours} hours.
+
+${activitiesWithTime}
+
+Please provide a detailed summary that includes:
+1. How the day was spent (time distribution)
+2. Main focus areas or themes
+3. Productive vs non-productive time
+4. Any patterns worth noting
+5. Total active hours: ${activeHours}
+
+Format your response with markdown headings and bullet points.`;
+
+        const result = await session.prompt(timeContext);
         setSummary({ text: result, isAI: true });
         session.destroy(); // Clean up the session
       }
@@ -298,6 +338,88 @@ export default function ActivityTracker() {
       setDownloadProgress(null);
     }
   };
+
+  // Calculate approximate hours spent based on activities
+  const calculateActiveHours = (activities: Activity[]) => {
+    if (activities.length === 0) return 0;
+
+    // Sort activities by time
+    const sortedActivities = [...activities].sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    );
+
+    // Calculate total time (estimate 15 minutes per activity if not specified)
+    let totalHours = sortedActivities.length * 0.25;
+
+    // If we have at least 2 activities, try to estimate based on time span
+    if (sortedActivities.length >= 2) {
+      const firstActivity = sortedActivities[0];
+      const lastActivity = sortedActivities[sortedActivities.length - 1];
+
+      // Calculate time difference in hours
+      const timeDiff =
+        (lastActivity.timestamp.getTime() - firstActivity.timestamp.getTime()) /
+        (1000 * 60 * 60);
+
+      // Use the larger value between time difference and activity count * 0.25
+      totalHours = Math.max(timeDiff, totalHours);
+    }
+
+    return totalHours.toFixed(1);
+  };
+
+  // Effect to auto-refresh the summary on an interval when enabled
+  useEffect(() => {
+    if (!autoRefresh || !isClient || !isAIAvailable || isSummarizing) return;
+
+    // Only auto-refresh when viewing today's activities
+    const isToday =
+      selectedDate.toLocaleDateString() === new Date().toLocaleDateString();
+    if (!isToday) return;
+
+    // Set up a 10-minute interval for refreshing
+    const interval = setInterval(() => {
+      if (filteredActivities.length > 0) {
+        generateSummary();
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, isClient, isAIAvailable, selectedDate, filteredActivities]);
+
+  // Skeleton component for summary loading state
+  const SummarySkeleton = () => (
+    <div className="animate-pulse">
+      {/* Title skeleton */}
+      <div className="h-6 bg-secondary/50 rounded w-3/4 mb-3"></div>
+
+      {/* Content skeleton */}
+      <div className="space-y-3">
+        <div className="h-4 bg-secondary/50 rounded w-full"></div>
+        <div className="h-4 bg-secondary/50 rounded w-5/6"></div>
+        <div className="h-4 bg-secondary/50 rounded w-4/5"></div>
+
+        {/* Subtitle skeleton */}
+        <div className="h-5 bg-secondary/40 rounded w-1/2 mt-5"></div>
+
+        {/* List items skeleton */}
+        <div className="pl-3 space-y-2 mt-3">
+          <div className="h-3 bg-secondary/50 rounded w-full"></div>
+          <div className="h-3 bg-secondary/50 rounded w-11/12"></div>
+          <div className="h-3 bg-secondary/50 rounded w-4/5"></div>
+        </div>
+
+        {/* Another subtitle skeleton */}
+        <div className="h-5 bg-secondary/40 rounded w-2/5 mt-4"></div>
+
+        {/* More list items skeleton */}
+        <div className="pl-3 space-y-2 mt-3">
+          <div className="h-3 bg-secondary/50 rounded w-3/4"></div>
+          <div className="h-3 bg-secondary/50 rounded w-full"></div>
+        </div>
+      </div>
+    </div>
+  );
 
   // Conditional rendering based on isClient
   if (!isClient) {
@@ -386,12 +508,82 @@ export default function ActivityTracker() {
         {/* Summary Section - Full width on mobile, right side on desktop, sticky on both */}
         <div className="lg:w-5/12 order-1 lg:order-2">
           <div className="sticky top-32 mt-4 p-8 border rounded-lg bg-secondary/30">
-            <h2 className="text-lg font-semibold mb-2 text-foreground/90">
-              {selectedDate.toLocaleDateString() ===
-              new Date().toLocaleDateString()
-                ? "Today's Summary"
-                : `${month} ${dayOfMonth} Summary`}
-            </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-foreground/90">
+                {selectedDate.toLocaleDateString() ===
+                new Date().toLocaleDateString()
+                  ? "Today's Summary"
+                  : `${month} ${dayOfMonth} Summary`}
+              </h2>
+
+              {isAIAvailable && (
+                <div className="flex items-center gap-2">
+                  {/* Auto-refresh toggle */}
+                  {selectedDate.toLocaleDateString() ===
+                    new Date().toLocaleDateString() && (
+                    <button
+                      onClick={() => setAutoRefresh(!autoRefresh)}
+                      className={`p-1.5 rounded-full transition-colors ${
+                        autoRefresh
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
+                          : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
+                      }`}
+                      title={
+                        autoRefresh
+                          ? "Auto-refresh enabled"
+                          : "Enable auto-refresh"
+                      }
+                      aria-label={
+                        autoRefresh
+                          ? "Disable auto-refresh"
+                          : "Enable auto-refresh"
+                      }
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                      </svg>
+                    </button>
+                  )}
+
+                  {/* Generate summary button (now an icon) */}
+                  <button
+                    onClick={generateSummary}
+                    disabled={isSummarizing || !filteredActivities.length}
+                    className="p-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Generate summary"
+                    aria-label="Generate summary"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 16v-4" />
+                      <path d="M12 8h.01" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {isAIAvailable === null ? (
               <p className="text-sm text-muted-foreground">
                 Checking AI availability...
@@ -420,39 +612,138 @@ export default function ActivityTracker() {
               </div>
             ) : (
               <>
-                <button
-                  onClick={generateSummary}
-                  disabled={isSummarizing || !filteredActivities.length}
-                  className="mb-3 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSummarizing
-                    ? downloadProgress !== null
-                      ? `Downloading model (${Math.round(
-                          downloadProgress * 100
-                        )}%)`
-                      : "Summarizing..."
-                    : selectedDate.toLocaleDateString() ===
-                      new Date().toLocaleDateString()
-                    ? "Generate Summary"
-                    : `Summarize ${month} ${dayOfMonth}`}
-                </button>
                 {isSummarizing ? (
-                  <p className="text-sm text-muted-foreground animate-pulse">
-                    {downloadProgress !== null
-                      ? "Downloading AI model..."
-                      : "Generating summary..."}
-                  </p>
+                  <div className="min-h-[200px]">
+                    {downloadProgress !== null ? (
+                      <div className="flex flex-col items-center justify-center h-40 text-center">
+                        <div className="w-20 h-20 rounded-full border-4 border-secondary border-t-primary animate-spin mb-3"></div>
+                        <p className="text-sm text-muted-foreground">
+                          Downloading AI model (
+                          {Math.round(downloadProgress * 100)}%)
+                        </p>
+                      </div>
+                    ) : (
+                      <SummarySkeleton />
+                    )}
+                  </div>
                 ) : summary ? (
                   <div className="text-foreground/80 max-h-[40vh] overflow-y-auto">
                     {summary.isAI ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown>{summary.text}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            // Enhance headings with category colors
+                            h1: ({ children }) => (
+                              <h1 className="text-xl font-bold text-primary mb-2">
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children }) => {
+                              const heading = children?.toString() || "";
+                              let colorClass =
+                                "text-blue-600 dark:text-blue-400";
+
+                              // Add color coding for different categories
+                              if (
+                                heading
+                                  .toLowerCase()
+                                  .includes("time distribution")
+                              ) {
+                                colorClass =
+                                  "text-indigo-600 dark:text-indigo-400";
+                              } else if (
+                                heading.toLowerCase().includes("focus") ||
+                                heading.toLowerCase().includes("theme")
+                              ) {
+                                colorClass =
+                                  "text-emerald-600 dark:text-emerald-400";
+                              } else if (
+                                heading.toLowerCase().includes("productive")
+                              ) {
+                                colorClass =
+                                  "text-amber-600 dark:text-amber-400";
+                              } else if (
+                                heading.toLowerCase().includes("pattern")
+                              ) {
+                                colorClass =
+                                  "text-fuchsia-600 dark:text-fuchsia-400";
+                              }
+
+                              return (
+                                <h2
+                                  className={`text-lg font-medium ${colorClass} border-b border-secondary/50 pb-1 pt-2`}
+                                >
+                                  {children}
+                                </h2>
+                              );
+                            },
+                            // Highlight key insights
+                            strong: ({ children }) => (
+                              <strong className="font-medium text-rose-600 dark:text-rose-400">
+                                {children}
+                              </strong>
+                            ),
+                            // Style lists for better readability
+                            ul: ({ children }) => (
+                              <ul className="pl-5 space-y-1 mt-2 mb-3 list-disc">
+                                {children}
+                              </ul>
+                            ),
+                            li: ({ children }) => (
+                              <li className="text-foreground/90 ml-2 list-item">
+                                {children}
+                              </li>
+                            ),
+                          }}
+                        >
+                          {summary.text}
+                        </ReactMarkdown>
                       </div>
                     ) : (
                       <p>{summary.text}</p>
                     )}
-                    {summary.isAI && (
-                      <div className="mt-2 text-xs inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                  </div>
+                ) : filteredActivities.length > 0 ? (
+                  <div className="min-h-[200px] flex flex-col items-center justify-center text-center p-6">
+                    <div className="text-muted-foreground mb-2">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="40"
+                        height="40"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="mx-auto mb-2 opacity-50"
+                      >
+                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                        <path d="M7 8h10" />
+                        <path d="M7 12h10" />
+                        <path d="M7 16h10" />
+                      </svg>
+                      <p className="text-sm">
+                        Click the analysis icon to generate your daily summary
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="min-h-[200px] flex items-center justify-center">
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      {selectedDate.toLocaleDateString() ===
+                      new Date().toLocaleDateString()
+                        ? "Add some activities to generate a summary."
+                        : `No activities found for ${month} ${dayOfMonth}. Add activities or select a different date.`}
+                    </p>
+                  </div>
+                )}
+
+                {/* Dedicated footer for summary metadata */}
+                {summary && summary.isAI && (
+                  <div className="pt-4 mt-4 border-t border-secondary/30">
+                    <div className="flex flex-col xs:flex-row items-start xs:items-center xs:justify-between gap-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 text-xs">
                         <svg
                           className="w-3 h-3 mr-1"
                           fill="currentColor"
@@ -462,20 +753,29 @@ export default function ActivityTracker() {
                           <path d="M10 2C5.59 2 2 5.59 2 10C2 14.41 5.59 18 10 18C14.41 18 18 14.41 18 10C18 5.59 14.41 2 10 2ZM10 16C6.69 16 4 13.31 4 10C4 6.69 6.69 4 10 4C13.31 4 16 6.69 16 10C16 13.31 13.31 16 10 16ZM13 6H9V11H13V6Z"></path>
                         </svg>
                         Generated by Chrome AI
-                      </div>
-                    )}
+                      </span>
+                      {autoRefresh && (
+                        <span className="text-xs flex items-center text-muted-foreground">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="mr-1"
+                          >
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                          </svg>
+                          Auto-refreshes every 10 minutes
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ) : filteredActivities.length > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Click the button to generate a summary of your day.
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {selectedDate.toLocaleDateString() ===
-                    new Date().toLocaleDateString()
-                      ? "Add some activities to generate a summary."
-                      : `No activities found for ${month} ${dayOfMonth}. Add activities or select a different date.`}
-                  </p>
                 )}
               </>
             )}
