@@ -322,12 +322,14 @@ export default function TimelineView({
                         >
                           {/* Progress bar for current time block */}
                           {block.fulltime === currentTimeBlock && (
-                            <div className="absolute bottom-0 left-0 h-0.5 bg-gray-100 w-full rounded-sm">
+                            <div className="absolute bottom-0 left-0 h-1.5 bg-gray-100 w-full rounded-sm">
                               <div
-                                className="absolute h-full bg-rose-200 rounded-sm transition-all duration-300 ease-in-out"
+                                className="absolute h-full bg-rose-300 rounded-sm transition-all duration-300 ease-in-out"
                                 style={{ width: `${progressInCurrentBlock}%` }}
                               >
-                                <TimeIndicator time={formattedCurrentTime} />
+                                <div className="absolute top-1/2 right-0 -translate-y-1/2 translate-x-full bg-rose-400 text-white text-xs py-1 px-2 rounded-md whitespace-nowrap shadow-sm ml-1">
+                                  {formattedCurrentTime}
+                                </div>
                               </div>
                             </div>
                           )}
