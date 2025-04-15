@@ -58,6 +58,9 @@ export default function ActivityTracker() {
   const [isClient, setIsClient] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [userName, setUserName] = useState("User");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
 
   // Format date for display
   const dayOfWeek = selectedDate.toLocaleDateString("en-US", {
@@ -141,6 +144,12 @@ export default function ActivityTracker() {
       if (savedAutoRefresh !== null) {
         setAutoRefresh(savedAutoRefresh === "true");
       }
+
+      // Load user name from localStorage
+      const savedName = localStorage.getItem("userName");
+      if (savedName) {
+        setUserName(savedName);
+      }
     }
   }, [isClient]);
 
@@ -150,6 +159,13 @@ export default function ActivityTracker() {
       localStorage.setItem("autoRefresh", autoRefresh.toString());
     }
   }, [autoRefresh, isClient]);
+
+  // Save user name to localStorage when it changes
+  useEffect(() => {
+    if (isClient && userName !== "User") {
+      localStorage.setItem("userName", userName);
+    }
+  }, [userName, isClient]);
 
   // Load activities from local storage on component mount
   useEffect(() => {
@@ -436,6 +452,37 @@ Format your response with markdown headings and bullet points.`;
     setAutoRefresh((prev) => !prev);
   };
 
+  // Get appropriate greeting based on time of day
+  const getGreeting = () => {
+    const currentHour = new Date().getHours();
+
+    if (currentHour >= 5 && currentHour < 12) {
+      return "Good morning";
+    } else if (currentHour >= 12 && currentHour < 18) {
+      return "Good afternoon";
+    } else {
+      return "Good evening";
+    }
+  };
+
+  // Save user name and exit edit mode
+  const handleSaveName = () => {
+    if (tempName.trim()) {
+      setUserName(tempName.trim());
+    }
+    setIsEditingName(false);
+  };
+
+  // Handle edit name input key press
+  const handleNameKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSaveName();
+    } else if (e.key === "Escape") {
+      setIsEditingName(false);
+      setTempName(userName);
+    }
+  };
+
   // Conditional rendering based on isClient
   if (!isClient) {
     // Render nothing or a placeholder during SSR and initial client render
@@ -453,6 +500,75 @@ Format your response with markdown headings and bullet points.`;
           <span className="text-6xl font-light text-foreground">
             {dayOfMonth}
           </span>
+        </div>
+
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-rose-500 font-semibold text-lg">
+          {isEditingName ? (
+            <div className="flex items-center bg-background/50 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-rose-200/30 animate-fadeIn">
+              <input
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                onKeyDown={handleNameKeyPress}
+                onBlur={handleSaveName}
+                className="bg-transparent border-b border-rose-300 outline-none text-rose-500 px-1 w-40 text-center transition-all focus:border-rose-400"
+                placeholder="Enter your name"
+                autoFocus
+                maxLength={20}
+              />
+              <button
+                onClick={handleSaveName}
+                className="ml-2 text-rose-400 hover:text-rose-600 transition-colors"
+                title="Save name"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <div
+              onClick={() => {
+                setIsEditingName(true);
+                setTempName(userName);
+              }}
+              className="cursor-pointer group relative px-3 py-1.5 rounded-lg hover:bg-background/50 transition-all duration-300 hover:backdrop-blur-sm flex items-center"
+              title="Click to edit your name"
+            >
+              <span className="relative">
+                {getGreeting()},{" "}
+                <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-amber-500 inline-block">
+                  {userName}
+                </span>
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-rose-400 to-amber-400 group-hover:w-full transition-all duration-300"></span>
+              </span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="ml-1.5 opacity-0 group-hover:opacity-70 transition-opacity"
+              >
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
