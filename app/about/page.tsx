@@ -1,4 +1,17 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About Timi | 15-Minute Activity Tracker",
+  description:
+    "Timi is a tiny tool to track what you're doing every 15 minutes, helping you stay accountable and understand your time better. Built with privacy in mind - all data stays on your device.",
+  openGraph: {
+    title: "About Timi | 15-Minute Activity Tracker",
+    description:
+      "Timi is a tiny tool to track what you're doing every 15 minutes, helping you stay accountable and understand your time better.",
+    type: "website",
+  },
+};
 
 export default function AboutPage() {
   return (
