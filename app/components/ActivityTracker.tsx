@@ -1,8 +1,8 @@
 "use client";
 
+import { Activity, DailySummary } from "../types";
 import { useEffect, useState } from "react";
 
-import { Activity } from "../types";
 import ReactMarkdown from "react-markdown";
 import TimelineView from "./TimelineView";
 
@@ -52,6 +52,7 @@ export default function ActivityTracker() {
     text: string;
     isAI: boolean;
   } | null>(null);
+  const [dailySummaries, setDailySummaries] = useState<DailySummary[]>([]);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState<boolean | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
@@ -69,12 +70,19 @@ export default function ActivityTracker() {
   const month = selectedDate.toLocaleDateString("en-US", { month: "long" });
   const dayOfMonth = selectedDate.getDate();
 
+  // Format date for storage and retrieval
+  const formatDateKey = (date: Date): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
   // Navigate to previous day
   const goToPreviousDay = () => {
     const prevDay = new Date(selectedDate);
     prevDay.setDate(prevDay.getDate() - 1);
     setSelectedDate(prevDay);
-    setSummary(null); // Clear summary when changing date
   };
 
   // Navigate to next day
@@ -82,13 +90,11 @@ export default function ActivityTracker() {
     const nextDay = new Date(selectedDate);
     nextDay.setDate(nextDay.getDate() + 1);
     setSelectedDate(nextDay);
-    setSummary(null); // Clear summary when changing date
   };
 
   // Navigate to today
   const goToToday = () => {
     setSelectedDate(new Date());
-    setSummary(null); // Clear summary when changing date
   };
 
   // Check for Summarizer API availability
@@ -167,7 +173,7 @@ export default function ActivityTracker() {
     }
   }, [userName, isClient]);
 
-  // Load activities from local storage on component mount
+  // Load activities and summaries from local storage on component mount
   useEffect(() => {
     const savedActivities = localStorage.getItem("activities");
     if (savedActivities) {
@@ -184,12 +190,40 @@ export default function ActivityTracker() {
         console.error("Failed to load activities:", error);
       }
     }
+
+    // Load saved summaries
+    const savedSummaries = localStorage.getItem("dailySummaries");
+    if (savedSummaries) {
+      try {
+        const parsedSummaries = JSON.parse(savedSummaries);
+        setDailySummaries(parsedSummaries);
+      } catch (error) {
+        console.error("Failed to load summaries:", error);
+      }
+    }
   }, []);
 
   // Save activities to local storage whenever they change
   useEffect(() => {
     localStorage.setItem("activities", JSON.stringify(activities));
   }, [activities]);
+
+  // Save summaries to local storage whenever they change
+  useEffect(() => {
+    localStorage.setItem("dailySummaries", JSON.stringify(dailySummaries));
+  }, [dailySummaries]);
+
+  // Check for saved summary when date changes
+  useEffect(() => {
+    const dateKey = formatDateKey(selectedDate);
+    const savedSummary = dailySummaries.find((ds) => ds.date === dateKey);
+
+    if (savedSummary) {
+      setSummary(savedSummary.summary);
+    } else {
+      setSummary(null);
+    }
+  }, [selectedDate, dailySummaries]);
 
   // Add a new activity
   const handleAddActivity = (description: string, timeBlock: string) => {
@@ -322,7 +356,33 @@ Please analyze:
         });
         console.log("🚀 ~ generateSummary ~ result:", result);
 
-        setSummary({ text: result, isAI: true });
+        const newSummary = { text: result, isAI: true };
+        setSummary(newSummary);
+
+        // Save the summary for this date
+        const dateKey = formatDateKey(selectedDate);
+        const existingSummaryIndex = dailySummaries.findIndex(
+          (ds) => ds.date === dateKey
+        );
+
+        if (existingSummaryIndex >= 0) {
+          // Update existing summary
+          const updatedSummaries = [...dailySummaries];
+          updatedSummaries[existingSummaryIndex] = {
+            date: dateKey,
+            summary: newSummary,
+          };
+          setDailySummaries(updatedSummaries);
+        } else {
+          // Add new summary
+          setDailySummaries([
+            ...dailySummaries,
+            {
+              date: dateKey,
+              summary: newSummary,
+            },
+          ]);
+        }
       }
       // Fall back to the generic session API
       else if (window.ai?.createGenericSession) {
@@ -348,7 +408,33 @@ Please provide a detailed summary that includes:
 Format your response with markdown headings and bullet points.`;
 
         const result = await session.prompt(timeContext);
-        setSummary({ text: result, isAI: true });
+        const newSummary = { text: result, isAI: true };
+        setSummary(newSummary);
+
+        // Save the summary for this date
+        const dateKey = formatDateKey(selectedDate);
+        const existingSummaryIndex = dailySummaries.findIndex(
+          (ds) => ds.date === dateKey
+        );
+
+        if (existingSummaryIndex >= 0) {
+          // Update existing summary
+          const updatedSummaries = [...dailySummaries];
+          updatedSummaries[existingSummaryIndex] = {
+            date: dateKey,
+            summary: newSummary,
+          };
+          setDailySummaries(updatedSummaries);
+        } else {
+          // Add new summary
+          setDailySummaries([
+            ...dailySummaries,
+            {
+              date: dateKey,
+              summary: newSummary,
+            },
+          ]);
+        }
         session.destroy(); // Clean up the session
       }
       // No AI is available
@@ -883,8 +969,35 @@ Format your response with markdown headings and bullet points.`;
                         >
                           <path d="M10 2C5.59 2 2 5.59 2 10C2 14.41 5.59 18 10 18C14.41 18 18 14.41 18 10C18 5.59 14.41 2 10 2ZM10 16C6.69 16 4 13.31 4 10C4 6.69 6.69 4 10 4C13.31 4 16 6.69 16 10C16 13.31 13.31 16 10 16ZM13 6H9V11H13V6Z"></path>
                         </svg>
-                        Generated by Chrome AI
+                        Generated with Chrome AI
                       </span>
+
+                      {/* Saved summary indicator */}
+                      {dailySummaries.some(
+                        (ds) => ds.date === formatDateKey(selectedDate)
+                      ) && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 text-xs">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="mr-1"
+                          >
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          Saved Summary
+                        </span>
+                      )}
+
+                      {/* Auto-refresh indicator */}
                       {autoRefresh && (
                         <span className="text-xs flex items-center text-muted-foreground">
                           <svg
