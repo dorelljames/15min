@@ -30,10 +30,10 @@ export default function TimelineView({
   const timelineContainerRef = useRef<HTMLDivElement>(null); // Ref for the timeline container
 
   useEffect(() => {
-    // Update current time every minute
+    // Update current time every second
     const timerId = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // 60 * 1000 ms = 1 minute
+    }, 1000); // 1 second interval for more accurate time display
 
     // Clear interval on component unmount
     return () => clearInterval(timerId);
@@ -42,13 +42,14 @@ export default function TimelineView({
   // Twitter-length character limit
   const MAX_CHARS = 280;
 
-  // Generate time blocks for the full day (00:00 to 23:45)
-  const startHour = 0; // Start at midnight
-  const hours = 24; // Show 24 hours
+  // Generate time blocks starting from 5 AM and wrapping around
+  const startHour = 5; // Start at 5 AM
+  const hours = 24; // Still show 24 hours
   const timeBlocks = Array.from({ length: hours * 4 }, (_, i) => {
-    const hour = Math.floor(i / 4) + startHour;
+    // Calculate hour with wraparound (5, 6, ..., 23, 0, 1, 2, 3, 4)
+    const hour = (Math.floor(i / 4) + startHour) % 24;
     const minute = (i % 4) * 15;
-    // Adjust hour for 12 AM display
+    // Adjust hour for 12 AM/PM display
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return {
       time: `${hour}:${minute.toString().padStart(2, "0")}`,
