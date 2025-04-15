@@ -813,18 +813,31 @@ Format your response with markdown headings and bullet points.`;
                 <ol className="text-sm space-y-2 list-decimal pl-5 mb-3">
                   <li>Make sure you're using Chrome 131 or newer</li>
                   <li>
-                    Open{" "}
-                    <code className="px-1 py-0.5 bg-secondary/50 rounded">
-                      chrome://flags/#summarization-api-for-gemini-nano
-                    </code>
+                    Enable these Chrome flags (copy each URL and open in a new
+                    tab):
+                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                      <li>
+                        <code className="px-1 py-0.5 bg-secondary/50 rounded select-all cursor-pointer">
+                          chrome://flags/#summarization-api-for-gemini-nano
+                        </code>
+                      </li>
+                      <li>
+                        <code className="px-1 py-0.5 bg-secondary/50 rounded select-all cursor-pointer">
+                          chrome://flags/#prompt-api-for-gemini-nano
+                        </code>
+                      </li>
+                    </ul>
                   </li>
-                  <li>Set it to "Enabled"</li>
-                  <li>Restart Chrome</li>
-                  <li>Refresh this page</li>
+                  <li>Set both flags to "Enabled"</li>
+                  <li>Click "Restart" when prompted</li>
+                  <li>
+                    After Chrome restarts, return to this page and refresh
+                  </li>
                 </ol>
                 <p className="text-xs text-muted-foreground">
-                  This feature requires Chrome's on-device AI to generate
-                  summaries of your activities.
+                  This feature uses Chrome's built-in Gemini Nano model for
+                  private, on-device AI summaries without sending your data to
+                  any servers.
                 </p>
               </div>
             ) : (
