@@ -42,7 +42,7 @@ export default function RootLayout({
         )}
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
       >
         <ThemeProvider defaultTheme="system" storageKey="theme">
           <div className="fixed top-4 right-4 z-50">

@@ -4,10 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>15min Activity Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Sans:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="globals.css" />
+    <style>
+      :root {
+        --font-geist-sans: "Geist Sans", sans-serif;
+        --font-geist-mono: "Geist Mono", monospace;
+      }
+
+      body {
+        font-family: "Geist Sans", sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      * {
+        font-family: "Geist Sans", sans-serif;
+      }
+
+      pre,
+      code {
+        font-family: "Geist Mono", monospace;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root" class="min-h-screen bg-gray-50/50"></div>
+  <body class="antialiased">
+    <div id="root" class="min-h-screen bg-background"></div>
     <script src="bundle.js"></script>
   </body>
 </html>
