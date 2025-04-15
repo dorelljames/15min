@@ -42,14 +42,13 @@ export default function RootLayout({
         )}
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans w-full`}
       >
         <ThemeProvider defaultTheme="system" storageKey="theme">
           <div className="fixed top-4 right-4 z-50">
             <ThemeSwitcher />
           </div>
-          <main>{children}</main>
-          <Footer />
+          <main className="w-full">{children}</main>
         </ThemeProvider>
       </body>
     </html>

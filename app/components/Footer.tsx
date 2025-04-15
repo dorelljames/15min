@@ -15,6 +15,10 @@ export default function Footer() {
         Dorell James
       </a>
       {" • "}
+      <a href="/about" className="text-rose-500 hover:underline">
+        About
+      </a>
+      {" • "}
       <a
         href="https://github.com/dorelljames/15min"
         target="_blank"
