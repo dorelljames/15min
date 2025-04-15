@@ -192,7 +192,6 @@ export default function ActivityTracker() {
     };
 
     setActivities([...activities, newActivity]);
-    setSummary(null); // Clear summary when a new activity is added
   };
 
   // Update an existing activity
@@ -202,13 +201,11 @@ export default function ActivityTracker() {
         activity.id === id ? { ...activity, description } : activity
       )
     );
-    setSummary(null); // Clear summary when an activity is updated
   };
 
   // Delete an activity
   const handleDeleteActivity = (id: string) => {
     setActivities(activities.filter((activity) => activity.id !== id));
-    setSummary(null); // Clear summary when an activity is deleted
   };
 
   // This function is still needed for the TimelineView props
