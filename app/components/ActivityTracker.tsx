@@ -56,12 +56,36 @@ export default function ActivityTracker() {
   const [isAIAvailable, setIsAIAvailable] = useState<boolean | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [isClient, setIsClient] = useState(false);
-  const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Format date for display
-  const dayOfWeek = today.toLocaleDateString("en-US", { weekday: "long" });
-  const month = today.toLocaleDateString("en-US", { month: "long" });
-  const dayOfMonth = today.getDate();
+  const dayOfWeek = selectedDate.toLocaleDateString("en-US", {
+    weekday: "long",
+  });
+  const month = selectedDate.toLocaleDateString("en-US", { month: "long" });
+  const dayOfMonth = selectedDate.getDate();
+
+  // Navigate to previous day
+  const goToPreviousDay = () => {
+    const prevDay = new Date(selectedDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    setSelectedDate(prevDay);
+    setSummary(null); // Clear summary when changing date
+  };
+
+  // Navigate to next day
+  const goToNextDay = () => {
+    const nextDay = new Date(selectedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    setSelectedDate(nextDay);
+    setSummary(null); // Clear summary when changing date
+  };
+
+  // Navigate to today
+  const goToToday = () => {
+    setSelectedDate(new Date());
+    setSummary(null); // Clear summary when changing date
+  };
 
   // Check for Summarizer API availability
   async function checkSummarizerAvailability() {
@@ -142,7 +166,13 @@ export default function ActivityTracker() {
     const newActivity: Activity = {
       id: crypto.randomUUID(),
       description,
-      timestamp: new Date(),
+      timestamp: new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        parseInt(timeBlock.split(":")[0]),
+        parseInt(timeBlock.split(":")[1])
+      ),
       completed: false, // We keep this property for backward compatibility
       timeBlock,
     };
@@ -172,13 +202,13 @@ export default function ActivityTracker() {
     // We're not using this functionality anymore, but keeping it for interface compatibility
   };
 
-  // Filter activities to show only today
-  const todayActivities = activities.filter((activity) => {
+  // Filter activities to show only for selected date
+  const filteredActivities = activities.filter((activity) => {
     const activityDate = new Date(activity.timestamp);
     return (
-      activityDate.getDate() === today.getDate() &&
-      activityDate.getMonth() === today.getMonth() &&
-      activityDate.getFullYear() === today.getFullYear()
+      activityDate.getDate() === selectedDate.getDate() &&
+      activityDate.getMonth() === selectedDate.getMonth() &&
+      activityDate.getFullYear() === selectedDate.getFullYear()
     );
   });
 
@@ -189,7 +219,7 @@ export default function ActivityTracker() {
     setIsSummarizing(true);
     setSummary(null);
 
-    const activitiesText = todayActivities
+    const activitiesText = filteredActivities
       .map((a) => `- ${a.description} (${a.timeBlock})`)
       .join("\n");
 
@@ -287,6 +317,57 @@ export default function ActivityTracker() {
             {dayOfMonth}
           </span>
         </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToPreviousDay}
+            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
+            aria-label="Previous day"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="lucide lucide-chevron-left"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+
+          <button
+            onClick={goToToday}
+            className="px-3 py-1 text-sm rounded bg-secondary/80 hover:bg-secondary/60 transition-colors"
+          >
+            Today
+          </button>
+
+          <button
+            onClick={goToNextDay}
+            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
+            aria-label="Next day"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="lucide lucide-chevron-right"
+            >
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Main content - Two columns on desktop, single column on mobile */}
@@ -294,7 +375,7 @@ export default function ActivityTracker() {
         {/* Timeline View - Full width on mobile, left side on desktop */}
         <div className="lg:w-7/12 order-2 lg:order-1">
           <TimelineView
-            activities={todayActivities}
+            activities={filteredActivities}
             onToggleActivity={handleToggleActivity}
             onAddActivity={handleAddActivity}
             onUpdateActivity={handleUpdateActivity}
@@ -304,9 +385,12 @@ export default function ActivityTracker() {
 
         {/* Summary Section - Full width on mobile, right side on desktop, sticky on both */}
         <div className="lg:w-5/12 order-1 lg:order-2">
-          <div className="sticky top-24 mt-4 p-8 border rounded-lg bg-secondary/30">
+          <div className="sticky top-32 mt-4 p-8 border rounded-lg bg-secondary/30">
             <h2 className="text-lg font-semibold mb-2 text-foreground/90">
-              Daily Summary
+              {selectedDate.toLocaleDateString() ===
+              new Date().toLocaleDateString()
+                ? "Today's Summary"
+                : `${month} ${dayOfMonth} Summary`}
             </h2>
             {isAIAvailable === null ? (
               <p className="text-sm text-muted-foreground">
@@ -338,7 +422,7 @@ export default function ActivityTracker() {
               <>
                 <button
                   onClick={generateSummary}
-                  disabled={isSummarizing || !todayActivities.length}
+                  disabled={isSummarizing || !filteredActivities.length}
                   className="mb-3 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSummarizing
@@ -347,7 +431,10 @@ export default function ActivityTracker() {
                           downloadProgress * 100
                         )}%)`
                       : "Summarizing..."
-                    : "Generate Summary"}
+                    : selectedDate.toLocaleDateString() ===
+                      new Date().toLocaleDateString()
+                    ? "Generate Summary"
+                    : `Summarize ${month} ${dayOfMonth}`}
                 </button>
                 {isSummarizing ? (
                   <p className="text-sm text-muted-foreground animate-pulse">
@@ -378,13 +465,16 @@ export default function ActivityTracker() {
                       </div>
                     )}
                   </div>
-                ) : todayActivities.length > 0 ? (
+                ) : filteredActivities.length > 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Click the button to generate a summary of your day.
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Add some activities to generate a summary.
+                    {selectedDate.toLocaleDateString() ===
+                    new Date().toLocaleDateString()
+                      ? "Add some activities to generate a summary."
+                      : `No activities found for ${month} ${dayOfMonth}. Add activities or select a different date.`}
                   </p>
                 )}
               </>
