@@ -54,8 +54,8 @@ export default function ActivityTracker() {
   } | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState<boolean | null>(null);
-  console.log("🚀 ~ ActivityTracker ~ isAIAvailable:", isAIAvailable);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const today = new Date();
 
   // Format date for display
@@ -100,6 +100,18 @@ export default function ActivityTracker() {
       setIsAIAvailable(false);
     }
   }
+
+  // Effect to set isClient to true after mount
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Effect to check AI availability only on the client after mount
+  useEffect(() => {
+    if (isClient) {
+      checkSummarizerAvailability();
+    }
+  }, [isClient]);
 
   // Load activities from local storage on component mount
   useEffect(() => {
@@ -172,7 +184,7 @@ export default function ActivityTracker() {
 
   // Generate summary using on-device AI
   const generateSummary = async () => {
-    if (!todayActivities.length) return;
+    if (!isClient || !isAIAvailable) return;
 
     setIsSummarizing(true);
     setSummary(null);
@@ -207,21 +219,23 @@ export default function ActivityTracker() {
         };
 
         // Create the summarizer
-        const summarizer = await window.ai.summarizer.create({
-          ...options,
-          monitor(m) {
-            m.addEventListener("downloadprogress", (e: any) => {
-              console.log(`Downloaded ${e.loaded * 100}%`);
-              setDownloadProgress(e.loaded);
-            });
-          },
-        });
+        const monitor = (m: EventTarget) => {
+          m.addEventListener("progress", (event: any) => {
+            setDownloadProgress(event.detail.progress);
+          });
+          m.addEventListener("done", () => {
+            setDownloadProgress(null);
+            setIsAIAvailable(true);
+          });
+          m.addEventListener("error", (event: any) => {
+            console.error("Model download error:", event.detail);
+            setDownloadProgress(null);
+            setIsAIAvailable(false);
+          });
+        };
 
-        // If model needs to be downloaded, wait for it
-        if (availability === "downloadable" || availability === "downloading") {
-          console.log("Waiting for model to be ready...");
-          await summarizer.ready;
-        }
+        const summarizer = await window.ai.summarizer.create({ monitor });
+        await summarizer.ready;
 
         // Generate the summary
         console.log("Generating summary with Summarizer API");
@@ -254,6 +268,12 @@ export default function ActivityTracker() {
       setDownloadProgress(null);
     }
   };
+
+  // Conditional rendering based on isClient
+  if (!isClient) {
+    // Render nothing or a placeholder during SSR and initial client render
+    return null; // Or a loading skeleton
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 relative min-h-screen">
