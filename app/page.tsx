@@ -1,5 +1,4 @@
 import ActivityTracker from "./components/ActivityTracker";
-import ChromeAINotification from "./components/ChromeAINotification";
 import Footer from "./components/Footer";
 import type { Metadata } from "next";
 
