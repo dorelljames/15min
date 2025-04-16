@@ -36,15 +36,6 @@ export default function ChromeAIStatusIndicator() {
       ) {
         const availability = await window.ai.summarizer.availability();
         setAIStatus(availability);
-      } else if (window.ai?.canCreateGenericSession) {
-        const result = await window.ai.canCreateGenericSession();
-        if (result === "readily") {
-          setAIStatus("available");
-        } else if (result === "after-download") {
-          setAIStatus("downloadable");
-        } else {
-          setAIStatus("unavailable");
-        }
       } else {
         setAIStatus("unavailable");
       }
