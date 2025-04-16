@@ -10,16 +10,6 @@ import TimelineView from "./TimelineView";
 declare global {
   interface Window {
     ai?: {
-      canCreateGenericSession: () => Promise<
-        "readily" | "after-download" | "no"
-      >;
-      createGenericSession: () => Promise<{
-        prompt: (prompt: string) => Promise<string>;
-        promptStreaming: (
-          prompt: string
-        ) => AsyncGenerator<string, void, unknown>;
-        destroy: () => void;
-      }>;
       summarizer?: {
         availability: () => Promise<
           "unavailable" | "downloadable" | "downloading" | "available"
@@ -106,6 +96,24 @@ export default function ActivityTracker() {
       console.log("Checking AI summarizer availability");
       setAIStatus("checking");
 
+      const options = {
+        monitor(m: EventTarget) {
+          m.addEventListener("downloadprogress", (e: any) => {
+            console.log(`Downloaded ${e.loaded * 100}%`);
+            setDownloadProgress(e.loaded * 100);
+
+            if (e.loaded === 1) {
+              setAIStatus("available");
+              setIsAIAvailable(true);
+            }
+          });
+        },
+        sharedContext: "This is a scientific article",
+        type: "key-points" as "key-points" | "tl;dr" | "teaser" | "headline",
+        format: "markdown",
+        length: "medium",
+      };
+
       // Check if the API is available
       if (
         "ai" in window &&
@@ -113,94 +121,27 @@ export default function ActivityTracker() {
         "summarizer" in window.ai &&
         window.ai.summarizer
       ) {
-        const availability = await window.ai.summarizer.availability();
+        let availability = await window.ai.summarizer.availability();
         console.log("Summarizer availability:", availability);
 
         setAIStatus(availability);
 
         // Only set AI as fully available if it's actually ready to use
-        setIsAIAvailable(availability === "available");
+        setIsAIAvailable(availability !== "unavailable");
 
         // If it's downloading or downloadable, set up download tracking
-        if (availability === "downloading" || availability === "downloadable") {
-          if (availability === "downloadable") {
-            // Automatically start the download process
-            try {
-              setAIStatus("downloading");
-              setDownloadProgress(0);
-
-              // Create monitor to track download progress
-              const monitor = new EventTarget();
-              monitor.addEventListener("progress", (event: any) => {
-                console.log("Download progress:", event.detail.progress);
-                setDownloadProgress(event.detail.progress);
-              });
-              monitor.addEventListener("done", () => {
-                console.log("Model download complete");
-                setDownloadProgress(null);
-                setIsAIAvailable(true);
-                setAIStatus("available");
-              });
-              monitor.addEventListener("error", (event: any) => {
-                console.error("Model download error:", event.detail);
-                setDownloadProgress(null);
-                setAIStatus("unavailable");
-              });
-
-              // Initialize the summarizer which triggers the download
-              const summarizer = await window.ai.summarizer.create({
-                monitor: monitor as unknown as (m: EventTarget) => void,
-                type: "key-points",
-                format: "markdown",
-                length: "medium",
-              });
-
-              // Wait for the summarizer to be ready
-              await summarizer.ready;
-              setIsAIAvailable(true);
-              setAIStatus("available");
-            } catch (error) {
-              console.error("Error initializing AI model:", error);
-              setAIStatus("unavailable");
-            }
-          }
-        }
-      } else if (window.ai?.canCreateGenericSession) {
-        // Fall back to the generic session API if summarizer isn't available
-        console.log("Falling back to generic session API");
-        const result = await window.ai.canCreateGenericSession();
-        console.log("canCreateGenericSession result:", result);
-
-        if (result === "readily") {
-          setIsAIAvailable(true);
-          setAIStatus("available");
-        } else if (result === "after-download") {
-          setAIStatus("downloadable");
+        let summarizer;
+        if (availability !== "available") {
+          // Automatically start the download process
+          setAIStatus("downloading");
           setDownloadProgress(0);
 
-          // Automatically start the download process
-          try {
-            setAIStatus("downloading");
+          summarizer = await window.ai.summarizer.create(options as any);
 
-            // Initialize a session which should trigger the download
-            const session = await window.ai!.createGenericSession();
-            // If we got here, download succeeded
-            setIsAIAvailable(true);
-            setAIStatus("available");
-            setDownloadProgress(null);
-
-            // Clean up the test session
-            session.destroy();
-          } catch (error) {
-            console.error("Error initializing generic AI session:", error);
-            setAIStatus("unavailable");
-          }
-        } else {
-          setIsAIAvailable(false);
-          setAIStatus("unavailable");
+          await summarizer.ready;
         }
       } else {
-        console.log("No AI API found");
+        console.log("No Chrome AI API found");
         setIsAIAvailable(false);
         setAIStatus("unavailable");
       }
@@ -210,96 +151,6 @@ export default function ActivityTracker() {
       setAIStatus("unavailable");
     }
   }
-
-  // Effect to set isClient to true after mount
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Effect to check AI availability only on the client after mount
-  useEffect(() => {
-    if (isClient) {
-      checkSummarizerAvailability();
-
-      // Load auto-refresh setting from localStorage
-      const savedAutoRefresh = localStorage.getItem("autoRefresh");
-      if (savedAutoRefresh !== null) {
-        setAutoRefresh(savedAutoRefresh === "true");
-      }
-
-      // Load user name from localStorage
-      const savedName = localStorage.getItem("userName");
-      if (savedName) {
-        setUserName(savedName);
-      }
-    }
-  }, [isClient]);
-
-  // Save auto-refresh setting to localStorage when it changes
-  useEffect(() => {
-    if (isClient) {
-      localStorage.setItem("autoRefresh", autoRefresh.toString());
-    }
-  }, [autoRefresh, isClient]);
-
-  // Save user name to localStorage when it changes
-  useEffect(() => {
-    if (isClient && userName !== "User") {
-      localStorage.setItem("userName", userName);
-    }
-  }, [userName, isClient]);
-
-  // Load activities and summaries from local storage on component mount
-  useEffect(() => {
-    const savedActivities = localStorage.getItem("activities");
-    if (savedActivities) {
-      try {
-        // Parse the saved activities and convert string dates back to Date objects
-        const parsedActivities = JSON.parse(savedActivities).map(
-          (activity: any) => ({
-            ...activity,
-            timestamp: new Date(activity.timestamp),
-          })
-        );
-        setActivities(parsedActivities);
-      } catch (error) {
-        console.error("Failed to load activities:", error);
-      }
-    }
-
-    // Load saved summaries
-    const savedSummaries = localStorage.getItem("dailySummaries");
-    if (savedSummaries) {
-      try {
-        const parsedSummaries = JSON.parse(savedSummaries);
-        setDailySummaries(parsedSummaries);
-      } catch (error) {
-        console.error("Failed to load summaries:", error);
-      }
-    }
-  }, []);
-
-  // Save activities to local storage whenever they change
-  useEffect(() => {
-    localStorage.setItem("activities", JSON.stringify(activities));
-  }, [activities]);
-
-  // Save summaries to local storage whenever they change
-  useEffect(() => {
-    localStorage.setItem("dailySummaries", JSON.stringify(dailySummaries));
-  }, [dailySummaries]);
-
-  // Check for saved summary when date changes
-  useEffect(() => {
-    const dateKey = formatDateKey(selectedDate);
-    const savedSummary = dailySummaries.find((ds) => ds.date === dateKey);
-
-    if (savedSummary) {
-      setSummary(savedSummary.summary);
-    } else {
-      setSummary(null);
-    }
-  }, [selectedDate, dailySummaries]);
 
   // Add a new activity
   const handleAddActivity = (description: string, timeBlock: string) => {
@@ -402,28 +253,7 @@ Please analyze:
 4. Any patterns worth noting
 `;
 
-        // Create the summarizer
-        const monitor = new EventTarget();
-        monitor.addEventListener("progress", (event: any) => {
-          console.log("Progress event:", event.detail.progress);
-          setDownloadProgress(event.detail.progress);
-          setAIStatus("downloading");
-        });
-        monitor.addEventListener("done", () => {
-          console.log("Model download complete");
-          setDownloadProgress(null);
-          setIsAIAvailable(true);
-          setAIStatus("available");
-        });
-        monitor.addEventListener("error", (event: any) => {
-          console.error("Model download error:", event.detail);
-          setDownloadProgress(null);
-          setIsAIAvailable(false);
-          setAIStatus("unavailable");
-        });
-
         const summarizer = await window.ai.summarizer.create({
-          monitor: monitor as unknown as (m: EventTarget) => void,
           type: "key-points",
           format: "markdown",
           length: "medium",
@@ -469,14 +299,9 @@ Please analyze:
           }
         } catch (error) {
           console.error("Error generating summary with summarizer:", error);
-          // Try falling back to generic session
-          await generateWithGenericSession();
         }
       }
-      // Fall back to the generic session API
-      else if (window.ai?.createGenericSession) {
-        await generateWithGenericSession();
-      }
+
       // No AI is available
       else {
         console.log("No AI APIs available");
@@ -489,70 +314,6 @@ Please analyze:
       setAIStatus("unavailable");
     } finally {
       setIsSummarizing(false);
-      if (downloadProgress === null) {
-        setDownloadProgress(null);
-      }
-    }
-
-    // Helper function for code reuse
-    async function generateWithGenericSession() {
-      console.log("Using generic session API for summary");
-      try {
-        const session = await window.ai!.createGenericSession();
-        setAIStatus("available");
-
-        const timeContext = `
-Analyze these chronologically ordered activities for ${
-          selectedDate.toLocaleDateString() === new Date().toLocaleDateString()
-            ? "today"
-            : `${month} ${dayOfMonth}`
-        }. Total tracked time: approximately ${activeHours} hours.
-
-${activitiesWithTime}
-
-Please provide a detailed summary that includes:
-1. How the day was spent (time distribution)
-2. Main focus areas or themes
-3. Productive vs non-productive time
-4. Any patterns worth noting
-5. Total active hours: ${activeHours}
-
-Format your response with markdown headings and bullet points.`;
-
-        const result = await session.prompt(timeContext);
-        const newSummary = { text: result, isAI: true };
-        setSummary(newSummary);
-
-        // Save the summary for this date
-        const dateKey = formatDateKey(selectedDate);
-        const existingSummaryIndex = dailySummaries.findIndex(
-          (ds) => ds.date === dateKey
-        );
-
-        if (existingSummaryIndex >= 0) {
-          // Update existing summary
-          const updatedSummaries = [...dailySummaries];
-          updatedSummaries[existingSummaryIndex] = {
-            date: dateKey,
-            summary: newSummary,
-          };
-          setDailySummaries(updatedSummaries);
-        } else {
-          // Add new summary
-          setDailySummaries([
-            ...dailySummaries,
-            {
-              date: dateKey,
-              summary: newSummary,
-            },
-          ]);
-        }
-        session.destroy(); // Clean up the session
-      } catch (error) {
-        console.error("Error with generic session:", error);
-        setIsAIAvailable(false);
-        setAIStatus("unavailable");
-      }
     }
   };
 
@@ -584,25 +345,6 @@ Format your response with markdown headings and bullet points.`;
 
     return totalHours.toFixed(1);
   };
-
-  // Effect to auto-refresh the summary on an interval when enabled
-  useEffect(() => {
-    if (!autoRefresh || !isClient || !isAIAvailable || isSummarizing) return;
-
-    // Only auto-refresh when viewing today's activities
-    const isToday =
-      selectedDate.toLocaleDateString() === new Date().toLocaleDateString();
-    if (!isToday) return;
-
-    // Set up a 10-minute interval for refreshing
-    const interval = setInterval(() => {
-      if (filteredActivities.length > 0) {
-        generateSummary();
-      }
-    }, 10 * 60 * 1000); // 10 minutes
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, isClient, isAIAvailable, selectedDate, filteredActivities]);
 
   // Skeleton component for summary loading state
   const SummarySkeleton = () => (
@@ -673,6 +415,115 @@ Format your response with markdown headings and bullet points.`;
       setTempName(userName);
     }
   };
+
+  // Effect to set isClient to true after mount
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Effect to check AI availability only on the client after mount
+  useEffect(() => {
+    if (isClient) {
+      checkSummarizerAvailability();
+
+      // Load auto-refresh setting from localStorage
+      const savedAutoRefresh = localStorage.getItem("autoRefresh");
+      if (savedAutoRefresh !== null) {
+        setAutoRefresh(savedAutoRefresh === "true");
+      }
+
+      // Load user name from localStorage
+      const savedName = localStorage.getItem("userName");
+      if (savedName) {
+        setUserName(savedName);
+      }
+    }
+  }, [isClient]);
+
+  // Save auto-refresh setting to localStorage when it changes
+  useEffect(() => {
+    if (isClient) {
+      localStorage.setItem("autoRefresh", autoRefresh.toString());
+    }
+  }, [autoRefresh, isClient]);
+
+  // Save user name to localStorage when it changes
+  useEffect(() => {
+    if (isClient && userName !== "User") {
+      localStorage.setItem("userName", userName);
+    }
+  }, [userName, isClient]);
+
+  // Load activities and summaries from local storage on component mount
+  useEffect(() => {
+    const savedActivities = localStorage.getItem("activities");
+    if (savedActivities) {
+      try {
+        // Parse the saved activities and convert string dates back to Date objects
+        const parsedActivities = JSON.parse(savedActivities).map(
+          (activity: any) => ({
+            ...activity,
+            timestamp: new Date(activity.timestamp),
+          })
+        );
+        setActivities(parsedActivities);
+      } catch (error) {
+        console.error("Failed to load activities:", error);
+      }
+    }
+
+    // Load saved summaries
+    const savedSummaries = localStorage.getItem("dailySummaries");
+    if (savedSummaries) {
+      try {
+        const parsedSummaries = JSON.parse(savedSummaries);
+        setDailySummaries(parsedSummaries);
+      } catch (error) {
+        console.error("Failed to load summaries:", error);
+      }
+    }
+  }, []);
+
+  // Save activities to local storage whenever they change
+  useEffect(() => {
+    localStorage.setItem("activities", JSON.stringify(activities));
+  }, [activities]);
+
+  // Save summaries to local storage whenever they change
+  useEffect(() => {
+    localStorage.setItem("dailySummaries", JSON.stringify(dailySummaries));
+  }, [dailySummaries]);
+
+  // Check for saved summary when date changes
+  useEffect(() => {
+    const dateKey = formatDateKey(selectedDate);
+    const savedSummary = dailySummaries.find((ds) => ds.date === dateKey);
+
+    if (savedSummary) {
+      setSummary(savedSummary.summary);
+    } else {
+      setSummary(null);
+    }
+  }, [selectedDate, dailySummaries]);
+
+  // Effect to auto-refresh the summary on an interval when enabled
+  useEffect(() => {
+    if (!autoRefresh || !isClient || !isAIAvailable || isSummarizing) return;
+
+    // Only auto-refresh when viewing today's activities
+    const isToday =
+      selectedDate.toLocaleDateString() === new Date().toLocaleDateString();
+    if (!isToday) return;
+
+    // Set up a 10-minute interval for refreshing
+    const interval = setInterval(() => {
+      if (filteredActivities.length > 0) {
+        generateSummary();
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, isClient, isAIAvailable, selectedDate, filteredActivities]);
 
   // Conditional rendering based on isClient
   if (!isClient) {
