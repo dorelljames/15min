@@ -1,4 +1,5 @@
 import ActivityTracker from "./components/ActivityTracker";
+import ChromeAINotification from "./components/ChromeAINotification";
 import Footer from "./components/Footer";
 import type { Metadata } from "next";
 
@@ -18,6 +19,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col w-full">
       <ActivityTracker />
+      <ChromeAINotification />
       <Footer />
     </div>
   );

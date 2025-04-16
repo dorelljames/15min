@@ -33,6 +33,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Origin trial tokens for Chrome AI APIs */}
+        {process.env.NEXT_PUBLIC_ORIGIN_TRIAL_TOKENS?.split(",").map(
+          (token, index) => (
+            <meta
+              key={`origin-trial-${index}`}
+              httpEquiv="origin-trial"
+              content={token.trim()}
+            />
+          )
+        )}
         {process.env.NODE_ENV === "production" && (
           <Script
             defer

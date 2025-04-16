@@ -56,6 +56,9 @@ export default function ActivityTracker() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isAIAvailable, setIsAIAvailable] = useState<boolean | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [aiStatus, setAIStatus] = useState<
+    "unavailable" | "downloadable" | "downloading" | "available" | "checking"
+  >("checking");
   const [isClient, setIsClient] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -101,6 +104,7 @@ export default function ActivityTracker() {
   async function checkSummarizerAvailability() {
     try {
       console.log("Checking AI summarizer availability");
+      setAIStatus("checking");
 
       // Check if the API is available
       if (
@@ -112,26 +116,98 @@ export default function ActivityTracker() {
         const availability = await window.ai.summarizer.availability();
         console.log("Summarizer availability:", availability);
 
-        // Consider both fully available and downloadable/downloading as available
+        setAIStatus(availability);
+
+        // Only set AI as fully available if it's actually ready to use
         setIsAIAvailable(availability === "available");
 
-        // If it's downloading, we could potentially track progress here
+        // If it's downloading or downloadable, set up download tracking
         if (availability === "downloading" || availability === "downloadable") {
-          setDownloadProgress(0);
+          if (availability === "downloadable") {
+            // Automatically start the download process
+            try {
+              setAIStatus("downloading");
+              setDownloadProgress(0);
+
+              // Create monitor to track download progress
+              const monitor = new EventTarget();
+              monitor.addEventListener("progress", (event: any) => {
+                console.log("Download progress:", event.detail.progress);
+                setDownloadProgress(event.detail.progress);
+              });
+              monitor.addEventListener("done", () => {
+                console.log("Model download complete");
+                setDownloadProgress(null);
+                setIsAIAvailable(true);
+                setAIStatus("available");
+              });
+              monitor.addEventListener("error", (event: any) => {
+                console.error("Model download error:", event.detail);
+                setDownloadProgress(null);
+                setAIStatus("unavailable");
+              });
+
+              // Initialize the summarizer which triggers the download
+              const summarizer = await window.ai.summarizer.create({
+                monitor: monitor as unknown as (m: EventTarget) => void,
+                type: "key-points",
+                format: "markdown",
+                length: "medium",
+              });
+
+              // Wait for the summarizer to be ready
+              await summarizer.ready;
+              setIsAIAvailable(true);
+              setAIStatus("available");
+            } catch (error) {
+              console.error("Error initializing AI model:", error);
+              setAIStatus("unavailable");
+            }
+          }
         }
       } else if (window.ai?.canCreateGenericSession) {
         // Fall back to the generic session API if summarizer isn't available
         console.log("Falling back to generic session API");
         const result = await window.ai.canCreateGenericSession();
         console.log("canCreateGenericSession result:", result);
-        setIsAIAvailable(result === "readily" || result === "after-download");
+
+        if (result === "readily") {
+          setIsAIAvailable(true);
+          setAIStatus("available");
+        } else if (result === "after-download") {
+          setAIStatus("downloadable");
+          setDownloadProgress(0);
+
+          // Automatically start the download process
+          try {
+            setAIStatus("downloading");
+
+            // Initialize a session which should trigger the download
+            const session = await window.ai!.createGenericSession();
+            // If we got here, download succeeded
+            setIsAIAvailable(true);
+            setAIStatus("available");
+            setDownloadProgress(null);
+
+            // Clean up the test session
+            session.destroy();
+          } catch (error) {
+            console.error("Error initializing generic AI session:", error);
+            setAIStatus("unavailable");
+          }
+        } else {
+          setIsAIAvailable(false);
+          setAIStatus("unavailable");
+        }
       } else {
         console.log("No AI API found");
         setIsAIAvailable(false);
+        setAIStatus("unavailable");
       }
     } catch (error) {
       console.error("Error checking AI availability:", error);
       setIsAIAvailable(false);
+      setAIStatus("unavailable");
     }
   }
 
@@ -303,6 +379,7 @@ export default function ActivityTracker() {
         // Initialize according to official pattern
         const availability = await window.ai.summarizer.availability();
         console.log("Summarizer availability:", availability);
+        setAIStatus(availability);
 
         if (availability === "unavailable") {
           console.log("Summarizer API not available");
@@ -326,68 +403,103 @@ Please analyze:
 `;
 
         // Create the summarizer
-        const monitor = (m: EventTarget) => {
-          m.addEventListener("progress", (event: any) => {
-            setDownloadProgress(event.detail.progress);
-          });
-          m.addEventListener("done", () => {
-            setDownloadProgress(null);
-            setIsAIAvailable(true);
-          });
-          m.addEventListener("error", (event: any) => {
-            console.error("Model download error:", event.detail);
-            setDownloadProgress(null);
-            setIsAIAvailable(false);
-          });
-        };
+        const monitor = new EventTarget();
+        monitor.addEventListener("progress", (event: any) => {
+          console.log("Progress event:", event.detail.progress);
+          setDownloadProgress(event.detail.progress);
+          setAIStatus("downloading");
+        });
+        monitor.addEventListener("done", () => {
+          console.log("Model download complete");
+          setDownloadProgress(null);
+          setIsAIAvailable(true);
+          setAIStatus("available");
+        });
+        monitor.addEventListener("error", (event: any) => {
+          console.error("Model download error:", event.detail);
+          setDownloadProgress(null);
+          setIsAIAvailable(false);
+          setAIStatus("unavailable");
+        });
 
         const summarizer = await window.ai.summarizer.create({
-          monitor,
+          monitor: monitor as unknown as (m: EventTarget) => void,
           type: "key-points",
           format: "markdown",
           length: "medium",
         });
-        await summarizer.ready;
 
-        // Generate the summary
-        console.log("Generating summary with Summarizer API");
-        const result = await summarizer.summarize(activitiesWithTime, {
-          context: timeContext,
-        });
-        console.log("🚀 ~ generateSummary ~ result:", result);
+        try {
+          await summarizer.ready;
+          setAIStatus("available");
 
-        const newSummary = { text: result, isAI: true };
-        setSummary(newSummary);
+          // Generate the summary
+          console.log("Generating summary with Summarizer API");
+          const result = await summarizer.summarize(activitiesWithTime, {
+            context: timeContext,
+          });
+          console.log("🚀 ~ generateSummary ~ result:", result);
 
-        // Save the summary for this date
-        const dateKey = formatDateKey(selectedDate);
-        const existingSummaryIndex = dailySummaries.findIndex(
-          (ds) => ds.date === dateKey
-        );
+          const newSummary = { text: result, isAI: true };
+          setSummary(newSummary);
 
-        if (existingSummaryIndex >= 0) {
-          // Update existing summary
-          const updatedSummaries = [...dailySummaries];
-          updatedSummaries[existingSummaryIndex] = {
-            date: dateKey,
-            summary: newSummary,
-          };
-          setDailySummaries(updatedSummaries);
-        } else {
-          // Add new summary
-          setDailySummaries([
-            ...dailySummaries,
-            {
+          // Save the summary for this date
+          const dateKey = formatDateKey(selectedDate);
+          const existingSummaryIndex = dailySummaries.findIndex(
+            (ds) => ds.date === dateKey
+          );
+
+          if (existingSummaryIndex >= 0) {
+            // Update existing summary
+            const updatedSummaries = [...dailySummaries];
+            updatedSummaries[existingSummaryIndex] = {
               date: dateKey,
               summary: newSummary,
-            },
-          ]);
+            };
+            setDailySummaries(updatedSummaries);
+          } else {
+            // Add new summary
+            setDailySummaries([
+              ...dailySummaries,
+              {
+                date: dateKey,
+                summary: newSummary,
+              },
+            ]);
+          }
+        } catch (error) {
+          console.error("Error generating summary with summarizer:", error);
+          // Try falling back to generic session
+          await generateWithGenericSession();
         }
       }
       // Fall back to the generic session API
       else if (window.ai?.createGenericSession) {
-        console.log("Using generic session API for summary");
-        const session = await window.ai.createGenericSession();
+        await generateWithGenericSession();
+      }
+      // No AI is available
+      else {
+        console.log("No AI APIs available");
+        setIsAIAvailable(false);
+        setAIStatus("unavailable");
+      }
+    } catch (error) {
+      console.error("Error generating summary:", error);
+      setIsAIAvailable(false);
+      setAIStatus("unavailable");
+    } finally {
+      setIsSummarizing(false);
+      if (downloadProgress === null) {
+        setDownloadProgress(null);
+      }
+    }
+
+    // Helper function for code reuse
+    async function generateWithGenericSession() {
+      console.log("Using generic session API for summary");
+      try {
+        const session = await window.ai!.createGenericSession();
+        setAIStatus("available");
 
         const timeContext = `
 Analyze these chronologically ordered activities for ${
@@ -436,18 +548,11 @@ Format your response with markdown headings and bullet points.`;
           ]);
         }
         session.destroy(); // Clean up the session
-      }
-      // No AI is available
-      else {
-        console.log("No AI APIs available");
+      } catch (error) {
+        console.error("Error with generic session:", error);
         setIsAIAvailable(false);
+        setAIStatus("unavailable");
       }
-    } catch (error) {
-      console.error("Error generating summary:", error);
-      setIsAIAvailable(false);
-    } finally {
-      setIsSummarizing(false);
-      setDownloadProgress(null);
     }
   };
 
@@ -801,43 +906,92 @@ Format your response with markdown headings and bullet points.`;
               )}
             </div>
 
-            {isAIAvailable === null ? (
+            {isAIAvailable === null || aiStatus === "checking" ? (
               <p className="text-sm text-muted-foreground">
                 Checking AI availability...
               </p>
-            ) : isAIAvailable === false ? (
+            ) : aiStatus === "unavailable" ? (
               <div>
                 <p className="text-sm text-amber-600 mb-3">
-                  Chrome AI is not available. To enable it:
+                  Chrome AI is not available in your browser.
                 </p>
-                <ol className="text-sm space-y-2 list-decimal pl-5 mb-3">
-                  <li>Make sure you're using Chrome 131 or newer</li>
-                  <li>
-                    Enable these Chrome flags (copy each URL and open in a new
-                    tab):
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                      <li>
-                        <code className="px-1 py-0.5 bg-secondary/50 rounded select-all cursor-pointer">
-                          chrome://flags/#summarization-api-for-gemini-nano
-                        </code>
-                      </li>
-                      <li>
-                        <code className="px-1 py-0.5 bg-secondary/50 rounded select-all cursor-pointer">
-                          chrome://flags/#prompt-api-for-gemini-nano
-                        </code>
-                      </li>
-                    </ul>
-                  </li>
-                  <li>Set both flags to "Enabled"</li>
-                  <li>Click "Restart" when prompted</li>
-                  <li>
-                    After Chrome restarts, return to this page and refresh
-                  </li>
-                </ol>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Please make sure you're using Chrome version 131 or newer.
+                </p>
+                <button
+                  onClick={checkSummarizerAvailability}
+                  className="px-3 py-1 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90 transition-colors w-full mb-3"
+                >
+                  Check again
+                </button>
                 <p className="text-xs text-muted-foreground">
                   This feature uses Chrome's built-in Gemini Nano model for
                   private, on-device AI summaries without sending your data to
                   any servers.
+                </p>
+              </div>
+            ) : aiStatus === "downloadable" ? (
+              <div className="min-h-[200px] flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-amber-300 rounded-md">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-12 w-12 text-amber-500 mb-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
+                  />
+                </svg>
+                <h3 className="text-lg font-medium text-amber-800 dark:text-amber-200 mb-2">
+                  Chrome AI model ready to download
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+                  Download the AI model to generate private, on-device summaries
+                  of your activities.
+                </p>
+                <button
+                  onClick={checkSummarizerAvailability}
+                  className="px-4 py-2 bg-amber-600 text-white font-medium rounded-md hover:bg-amber-700 transition-colors shadow-sm mb-3"
+                >
+                  Download AI Model
+                </button>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                  This is a one-time download of approximately 350MB. Your data
+                  stays on your device.
+                </p>
+              </div>
+            ) : aiStatus === "downloading" ? (
+              <div className="min-h-[200px] flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-blue-300 rounded-md">
+                <div className="relative mb-4">
+                  <div className="w-24 h-24 rounded-full border-4 border-secondary border-t-blue-500 animate-spin"></div>
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-600 font-bold text-lg">
+                    {downloadProgress !== null
+                      ? Math.round(downloadProgress * 100)
+                      : 0}
+                    %
+                  </div>
+                </div>
+                <h3 className="text-lg font-medium text-blue-800 dark:text-blue-200 mb-2">
+                  Downloading Chrome AI model
+                </h3>
+                <div className="w-full max-w-xs bg-gray-200 rounded-full h-2.5 mb-4">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full"
+                    style={{
+                      width: `${
+                        downloadProgress !== null
+                          ? Math.round(downloadProgress * 100)
+                          : 0
+                      }%`,
+                    }}
+                  ></div>
+                </div>
+                <p className="text-sm text-muted-foreground max-w-xs">
+                  Please keep this tab open until the download completes.
                 </p>
               </div>
             ) : (
