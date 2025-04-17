@@ -616,7 +616,7 @@ Please analyze:
         <div className="flex items-center gap-2">
           <button
             onClick={goToPreviousDay}
-            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
+            className="p-2 rounded-full hover:bg-secondary/50 transition-colors cursor-pointer hover:text-rose-500"
             aria-label="Previous day"
           >
             <svg
@@ -637,14 +637,14 @@ Please analyze:
 
           <button
             onClick={goToToday}
-            className="px-3 py-1 text-sm rounded bg-secondary/80 hover:bg-secondary/60 transition-colors"
+            className="px-3 py-1 text-sm rounded bg-secondary/80 hover:bg-secondary/60 transition-colors cursor-pointer"
           >
             Today
           </button>
 
           <button
             onClick={goToNextDay}
-            className="p-2 rounded-full hover:bg-secondary/50 transition-colors"
+            className="p-2 rounded-full hover:bg-secondary/50 transition-colors cursor-pointer hover:text-rose-500"
             aria-label="Next day"
           >
             <svg
