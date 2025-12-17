@@ -13,6 +13,17 @@ interface TimelineViewProps {
   onDeleteActivity: (id: string) => void;
 }
 
+// Types for activity grouping
+type GroupPosition = "standalone" | "first" | "middle" | "last";
+
+interface GroupInfo {
+  position: GroupPosition;
+  groupId: string; // Unique identifier for the group (first block's fulltime)
+  description: string;
+  activity: Activity;
+  groupSize: number; // Total number of blocks in this group
+}
+
 export default function TimelineView({
   activities,
   onToggleActivity,
@@ -27,6 +38,7 @@ export default function TimelineView({
     null
   );
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null); // Ref for the timeline container
 
   useEffect(() => {
@@ -71,6 +83,100 @@ export default function TimelineView({
     }
     activityByTimeBlock[activity.timeBlock].push(activity);
   });
+
+  // Compute visual grouping for consecutive identical activities
+  const groupInfoByTimeBlock: Record<string, GroupInfo> = {};
+
+  // Build grouping info by iterating through timeBlocks in order
+  let currentGroupId: string | null = null;
+  let currentGroupDescription: string | null = null;
+  let groupBlockIndices: number[] = [];
+
+  timeBlocks.forEach((block, index) => {
+    const blockActivities = activityByTimeBlock[block.fulltime] || [];
+
+    // Only group blocks with exactly one activity
+    if (blockActivities.length === 1) {
+      const activity = blockActivities[0];
+      const description = activity.description;
+
+      if (currentGroupDescription === description) {
+        // Continue the current group
+        groupBlockIndices.push(index);
+      } else {
+        // Finalize previous group if it exists
+        if (groupBlockIndices.length > 1 && currentGroupId) {
+          const groupSize = groupBlockIndices.length;
+          // Mark positions in the previous group
+          groupBlockIndices.forEach((idx, i) => {
+            const tb = timeBlocks[idx];
+            const act = activityByTimeBlock[tb.fulltime][0];
+            let position: GroupPosition = "middle";
+            if (i === 0) position = "first";
+            else if (i === groupBlockIndices.length - 1) position = "last";
+
+            groupInfoByTimeBlock[tb.fulltime] = {
+              position,
+              groupId: currentGroupId!,
+              description: currentGroupDescription!,
+              activity: act,
+              groupSize,
+            };
+          });
+        }
+
+        // Start a new potential group
+        currentGroupId = block.fulltime;
+        currentGroupDescription = description;
+        groupBlockIndices = [index];
+      }
+    } else {
+      // Finalize previous group if it exists
+      if (groupBlockIndices.length > 1 && currentGroupId) {
+        const groupSize = groupBlockIndices.length;
+        groupBlockIndices.forEach((idx, i) => {
+          const tb = timeBlocks[idx];
+          const act = activityByTimeBlock[tb.fulltime][0];
+          let position: GroupPosition = "middle";
+          if (i === 0) position = "first";
+          else if (i === groupBlockIndices.length - 1) position = "last";
+
+          groupInfoByTimeBlock[tb.fulltime] = {
+            position,
+            groupId: currentGroupId!,
+            description: currentGroupDescription!,
+            activity: act,
+            groupSize,
+          };
+        });
+      }
+
+      // Reset group tracking
+      currentGroupId = null;
+      currentGroupDescription = null;
+      groupBlockIndices = [];
+    }
+  });
+
+  // Finalize the last group if it extends to the end
+  if (groupBlockIndices.length > 1 && currentGroupId) {
+    const groupSize = groupBlockIndices.length;
+    groupBlockIndices.forEach((idx, i) => {
+      const tb = timeBlocks[idx];
+      const act = activityByTimeBlock[tb.fulltime][0];
+      let position: GroupPosition = "middle";
+      if (i === 0) position = "first";
+      else if (i === groupBlockIndices.length - 1) position = "last";
+
+      groupInfoByTimeBlock[tb.fulltime] = {
+        position,
+        groupId: currentGroupId!,
+        description: currentGroupDescription!,
+        activity: act,
+        groupSize,
+      };
+    });
+  }
 
   // Handle adding a new activity
   const handleAddActivity = (timeBlock: string) => {
@@ -147,13 +253,24 @@ export default function TimelineView({
             const blockActivities = activityByTimeBlock[block.fulltime] || [];
             const hasActivities = blockActivities.length > 0;
 
+            // Check if this block is part of a visual group
+            const groupInfo = groupInfoByTimeBlock[block.fulltime];
+            const isGrouped = !!groupInfo;
+            const isGroupHovered = isGrouped && hoveredGroupId === groupInfo.groupId;
+            const isAnyActivityEditing = blockActivities.some(
+              (a) => editingActivity?.id === a.id
+            );
+
+            // Determine if we should show collapsed (grouped) or expanded view
+            const showCollapsed = isGrouped && !isGroupHovered && !isAnyActivityEditing;
+
             return (
               <div key={block.fulltime} className="relative">
                 {/* Add hour marker and time label */}
                 {block.isFirstOfHour && (
                   <div
                     id={`hour-${Math.floor(index / 4)}`}
-                    className="h-10 flex items-center"
+                    className="h-10 flex items-center relative"
                   >
                     <div className="w-20 text-right pr-4">
                       <div className="text-muted-foreground text-sm">
@@ -163,6 +280,10 @@ export default function TimelineView({
                         {block.ampm}
                       </div>
                     </div>
+                    {/* Extend connecting line through hour marker for grouped activities */}
+                    {showCollapsed && groupInfo.position !== "first" && (
+                      <div className="w-[2px] h-full bg-rose-200 absolute left-[79.5px]"></div>
+                    )}
                   </div>
                 )}
 
@@ -171,17 +292,46 @@ export default function TimelineView({
                   <div className="w-20"></div>
                   {/* Timeline dot */}
                   <div className="w-[2px] self-stretch relative">
-                    <div
-                      className={`absolute w-[6px] h-[6px] rounded-full bg-background border-2 ${
-                        hasActivities ? "border-rose-300" : "border-border"
-                      } left-[-2.5px] top-[calc(50%-3px)]`}
-                    ></div>
+                    {/* For grouped blocks, show a connecting line instead of individual dots */}
+                    {showCollapsed && groupInfo.position !== "first" ? (
+                      <div className="absolute w-[2px] h-full bg-rose-200 left-[-0.5px] top-0"></div>
+                    ) : (
+                      <div
+                        className={`absolute w-[6px] h-[6px] rounded-full bg-background border-2 ${
+                          hasActivities ? "border-rose-300" : "border-border"
+                        } left-[-2.5px] top-[calc(50%-3px)]`}
+                      ></div>
+                    )}
+                    {/* Add connecting line below for first/middle blocks in collapsed group */}
+                    {showCollapsed && groupInfo.position !== "last" && (
+                      <div className="absolute w-[2px] h-1/2 bg-rose-200 left-[-0.5px] bottom-0"></div>
+                    )}
                   </div>
                   {/* Activity card area with consistent height */}
                   <div className="flex-1 pl-5 flex items-center">
                     <div className="w-full">
                       {hasActivities ? (
-                        <div className="border-b border-border py-2 px-1 min-h-8 relative">
+                        <div
+                          className={`py-2 px-1 min-h-8 relative transition-all duration-200 ${
+                            showCollapsed && groupInfo.position !== "last"
+                              ? "border-b border-transparent"
+                              : "border-b border-border"
+                          } ${
+                            isGrouped
+                              ? "cursor-pointer"
+                              : ""
+                          }`}
+                          onMouseEnter={() => {
+                            if (isGrouped) {
+                              setHoveredGroupId(groupInfo.groupId);
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            if (isGrouped) {
+                              setHoveredGroupId(null);
+                            }
+                          }}
+                        >
                           {/* Progress bar for current time block */}
                           {block.fulltime === currentTimeBlock && (
                             <div className="absolute bottom-0 left-0 h-0.5 bg-gray-100 w-full rounded-sm">
@@ -193,91 +343,113 @@ export default function TimelineView({
                               </div>
                             </div>
                           )}
-                          {blockActivities.map((activity) =>
-                            editingActivity?.id === activity.id ? (
+
+                          {/* Collapsed view: show text on first block only (centered), other blocks empty */}
+                          {showCollapsed ? (
+                            groupInfo.position === "first" ? (
+                              // First block: show text, vertically offset to center across group
                               <div
-                                key={activity.id}
-                                className="flex items-center"
+                                className="py-1 text-foreground text-base"
+                                style={{
+                                  transform: `translateY(${(groupInfo.groupSize - 1) * 24}px)`
+                                }}
                               >
-                                <input
-                                  type="text"
-                                  value={newActivity}
-                                  onChange={handleInputChange}
-                                  className="flex-1 bg-transparent border-none outline-none text-foreground py-1"
-                                  maxLength={MAX_CHARS}
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      handleUpdateActivity();
-                                    } else if (e.key === "Escape") {
-                                      setEditingActivity(null);
-                                      setNewActivity("");
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    if (newActivity.trim()) {
-                                      handleUpdateActivity();
-                                    } else {
-                                      setEditingActivity(null);
-                                      setNewActivity("");
-                                    }
-                                  }}
-                                />
-                                <div className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
-                                  {newActivity.length}/{MAX_CHARS}
-                                </div>
+                                {groupInfo.description}
                               </div>
                             ) : (
-                              <div
-                                key={activity.id}
-                                className="py-1 text-foreground hover:bg-secondary/20 rounded px-1 transition-colors text-base flex items-center justify-between group"
-                              >
-                                <span
-                                  className="cursor-pointer flex-grow"
-                                  onClick={() => {
-                                    setEditingActivity(activity);
-                                    setNewActivity(activity.description);
-                                  }}
+                              // Middle/last blocks: empty, visual connection via timeline line
+                              <div className="h-6" />
+                            )
+                          ) : (
+                            // Expanded view: show all activities normally
+                            blockActivities.map((activity) =>
+                              editingActivity?.id === activity.id ? (
+                                <div
+                                  key={activity.id}
+                                  className="flex items-center"
                                 >
-                                  {activity.description}
-                                </span>
-                                {deletingActivityId === activity.id ? (
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteActivity(activity.id);
-                                        setDeletingActivityId(null);
-                                      }}
-                                      className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded hover:bg-rose-600 transition-colors"
-                                      title="Confirm delete"
-                                    >
-                                      Delete
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeletingActivityId(null);
-                                      }}
-                                      className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded hover:bg-secondary/80 transition-colors"
-                                      title="Cancel delete"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeletingActivityId(activity.id);
+                                  <input
+                                    type="text"
+                                    value={newActivity}
+                                    onChange={handleInputChange}
+                                    className="flex-1 bg-transparent border-none outline-none text-foreground py-1"
+                                    maxLength={MAX_CHARS}
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        handleUpdateActivity();
+                                      } else if (e.key === "Escape") {
+                                        setEditingActivity(null);
+                                        setNewActivity("");
+                                      }
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-600 px-2"
-                                    title="Delete activity"
+                                    onBlur={() => {
+                                      if (newActivity.trim()) {
+                                        handleUpdateActivity();
+                                      } else {
+                                        setEditingActivity(null);
+                                        setNewActivity("");
+                                      }
+                                    }}
+                                  />
+                                  <div className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
+                                    {newActivity.length}/{MAX_CHARS}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  key={activity.id}
+                                  className={`py-1 text-foreground hover:bg-secondary/20 rounded px-1 transition-colors text-base flex items-center justify-between group ${
+                                    isGrouped ? "bg-rose-50/30 dark:bg-rose-950/20" : ""
+                                  }`}
+                                >
+                                  <span
+                                    className="cursor-pointer flex-grow"
+                                    onClick={() => {
+                                      setEditingActivity(activity);
+                                      setNewActivity(activity.description);
+                                    }}
                                   >
-                                    ×
-                                  </button>
-                                )}
-                              </div>
+                                    {activity.description}
+                                  </span>
+                                  {deletingActivityId === activity.id ? (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onDeleteActivity(activity.id);
+                                          setDeletingActivityId(null);
+                                        }}
+                                        className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded hover:bg-rose-600 transition-colors"
+                                        title="Confirm delete"
+                                      >
+                                        Delete
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeletingActivityId(null);
+                                        }}
+                                        className="text-xs bg-secondary text-foreground px-2 py-0.5 rounded hover:bg-secondary/80 transition-colors"
+                                        title="Cancel delete"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeletingActivityId(activity.id);
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-600 px-2"
+                                      title="Delete activity"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              )
                             )
                           )}
                         </div>
